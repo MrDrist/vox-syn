@@ -1,269 +1,441 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<title>Vox Syn Audio Chat</title>
-<style>
-body { margin:0; font-family:'Segoe UI', sans-serif; background:#1e1e2f; color:#fff; }
-.container { max-width:800px; margin:auto; padding:20px; }
-h1 { text-align:center; margin-bottom:30px; }
-#login { display:flex; flex-direction:column; align-items:center; gap:15px; }
-input { padding:10px; font-size:16px; border-radius:5px; border:none; width:200px; text-align:center; }
-button { padding:10px 20px; font-size:16px; border-radius:5px; border:none; cursor:pointer; transition:0.2s; }
-button:hover { background:#4c4cff; }
-#room { display:none; margin-top:20px; }
-#participants { display:flex; flex-wrap: wrap; gap:10px; margin-bottom:20px; }
-.participant { background:#2c2c44; padding:10px; border-radius:8px; min-width:120px; text-align:center; }
-.participant audio { width:100%; margin-top:5px; border-radius:5px; }
-#chat { background:#2c2c44; padding:10px; border-radius:8px; }
-#chatMessages { height:150px; overflow-y:auto; padding:5px; border:1px solid #555; margin-bottom:5px; background:#1e1e2f; border-radius:5px; }
-#chatInput { width:70%; padding:5px; border-radius:5px; border:none; }
-#sendBtn { padding:6px 12px; border-radius:5px; border:none; cursor:pointer; background:#4c4cff; color:#fff; margin-left:5px; }
-#errorMsg { color:#ff5555; margin-top:10px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vox Syn Audio Chat</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #1e1e2f;
+      color: #fff;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    #login {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+    input {
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: none;
+      width: 200px;
+      text-align: center;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: none;
+      cursor: pointer;
+      background: #4c4cff;
+      color: #fff;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: #5d5dff;
+    }
+    #room {
+      display: none;
+      margin-top: 20px;
+    }
+    #participants {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .participant {
+      background: #2c2c44;
+      padding: 10px;
+      border-radius: 8px;
+      min-width: 120px;
+      text-align: center;
+    }
+    .participant audio {
+      width: 100%;
+      margin-top: 5px;
+      border-radius: 5px;
+    }
+    #chat {
+      background: #2c2c44;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    #chatMessages {
+      height: 150px;
+      overflow-y: auto;
+      padding: 5px;
+      border: 1px solid #555;
+      margin-bottom: 5px;
+      background: #1e1e2f;
+      border-radius: 5px;
+    }
+    #chatInput {
+      width: 70%;
+      padding: 5px;
+      border-radius: 5px;
+      border: none;
+    }
+    #sendBtn {
+      padding: 6px 12px;
+      border-radius: 5px;
+      border: none;
+      cursor: pointer;
+      background: #4c4cff;
+      color: #fff;
+      margin-left: 5px;
+    }
+    #errorMsg {
+      color: #ff5555;
+      margin-top: 10px;
+      text-align: center;
+    }
+  </style>
 </head>
 <body>
-<div class="container">
+  <div class="container">
+    <h1>Vox Syn Audio Chat</h1>
 
-<h1>Vox Syn Audio Chat</h1>
+    <div id="login">
+      <input id="nameInput" placeholder="Ваше имя" maxlength="20" />
+      <div>
+        <button id="createBtn">Создать комнату</button>
+        <button id="joinBtn">Подключиться</button>
+      </div>
+      <input id="roomInput" placeholder="Код комнаты" style="display: none; margin-top: 10px;" maxlength="10" />
+      <div id="errorMsg"></div>
+    </div>
 
-<div id="login">
-  <input id="nameInput" placeholder="Ваше имя" />
-  <div>
-    <button id="createBtn">Создать комнату</button>
-    <button id="joinBtn">Подключиться</button>
-  </div>
-  <input id="roomInput" placeholder="Код комнаты" style="display:none; margin-top:10px;" />
-  <div id="errorMsg"></div>
-</div>
+    <div id="room">
+      <h2>Комната: <span id="roomCode"></span></h2>
+      <div id="participants"></div>
+      <div id="chat">
+        <h3>Чат</h3>
+        <div id="chatMessages"></div>
+        <input id="chatInput" placeholder="Написать сообщение..." maxlength="140" />
+        <button id="sendBtn">Отправить</button>
+      </div>
+    </div>
 
-<div id="room">
-  <h2>Комната: <span id="roomCode"></span></h2>
-  <div id="participants"></div>
-  <div id="chat">
-    <h3>Чат</h3>
-    <div id="chatMessages"></div>
-    <input id="chatInput" placeholder="Написать сообщение..." />
-    <button id="sendBtn">Отправить</button>
-  </div>
-</div>
+    <script type="module">
+      // === Firebase SDK ===
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+      import {
+        getAuth,
+        signInAnonymously,
+        onAuthStateChanged
+      } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+      import {
+        getDatabase,
+        ref,
+        set,
+        push,
+        onChildAdded,
+        get,
+        remove,
+        onChildRemoved
+      } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getDatabase, ref, set, push, onChildAdded, get, remove, onChildRemoved } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+      // === Firebase Config ===
+      const firebaseConfig = {
+        apiKey: "AIzaSyDuvwoM4s3EzM1tSRiyvhKFlkNsLlMNIbE",
+        authDomain: "vox-signal.firebaseapp.com",
+        databaseURL: "https://vox-signal-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "vox-signal",
+        storageBucket: "vox-signal.firebasestorage.app",
+        messagingSenderId: "410698338678",
+        appId: "1:410698338678:web:316010281098e78af4ea57"
+      };
 
-// ==================== CONFIG ====================
-const firebaseConfig = {
-  apiKey: "AIzaSyDuvwoM4s3EzM1tSRiyvhKFlkNsLlMNIbE",
-  authDomain: "vox-signal.firebaseapp.com",
-  databaseURL: "https://vox-signal-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "vox-signal",
-  storageBucket: "vox-signal.firebasestorage.app",
-  messagingSenderId: "410698338678",
-  appId: "1:410698338678:web:316010281098e78af4ea57"
-};
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+      // === Init ===
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getDatabase(app);
 
-// ==================== GLOBALS ====================
-let localStream;
-const pcs = {};
-let name = "";
-let roomId = "";
-let peerId = Math.random().toString(36).substring(2,10);
+      // === Globals ===
+      let localStream = null;
+      const pcs = {};
+      let name = "";
+      let roomId = "";
+      let peerId = null; // ← будет auth.uid
+      const messageQueue = {};
 
-// Для очереди сообщений пока DataChannel не открыт
-const messageQueue = {};
+      // === UI ===
+      const loginDiv = document.getElementById("login");
+      const roomDiv = document.getElementById("room");
+      const participantsDiv = document.getElementById("participants");
+      const roomCodeSpan = document.getElementById("roomCode");
+      const chatMessages = document.getElementById("chatMessages");
+      const chatInput = document.getElementById("chatInput");
+      const roomInput = document.getElementById("roomInput");
+      const errorMsg = document.getElementById("errorMsg");
 
-// UI
-const loginDiv = document.getElementById("login");
-const roomDiv = document.getElementById("room");
-const participantsDiv = document.getElementById("participants");
-const roomCodeSpan = document.getElementById("roomCode");
-const chatMessages = document.getElementById("chatMessages");
-const chatInput = document.getElementById("chatInput");
-const roomInput = document.getElementById("roomInput");
-const errorMsg = document.getElementById("errorMsg");
+      // === Utils ===
+      function showError(msg) {
+        errorMsg.textContent = msg;
+        setTimeout(() => (errorMsg.textContent = ""), 5000);
+      }
 
-// ==================== LOGIN ====================
-document.getElementById("createBtn").onclick = ()=>{
-  name = document.getElementById("nameInput").value.trim();
-  if(!name){ errorMsg.textContent="Введите имя"; return; }
-  roomId = Math.random().toString(36).substring(2,8);
-  enterRoom(true);
-};
+      function cleanupPeer(otherId) {
+        if (pcs[otherId]) {
+          pcs[otherId].pc.close();
+          delete pcs[otherId];
+        }
+        const el = document.getElementById(otherId);
+        if (el) el.remove();
+      }
 
-document.getElementById("joinBtn").onclick = ()=>{
-  roomInput.style.display="block";
-  roomInput.focus();
-};
+      async function cleanupRoom() {
+        const snapshot = await get(ref(db, `rooms/${roomId}/peers`));
+        if (!snapshot.exists()) {
+          await remove(ref(db, `rooms/${roomId}`));
+        }
+      }
 
-roomInput.addEventListener("keypress", async e=>{
-  if(e.key==="Enter"){
-    name = document.getElementById("nameInput").value.trim();
-    roomId = roomInput.value.trim();
-    if(!name||!roomId){ errorMsg.textContent="Введите имя и код комнаты"; return; }
-
-    // Проверяем, существует ли комната
-    const roomRef = ref(db, `rooms/${roomId}`);
-    const snapshot = await get(roomRef);
-    if(!snapshot.exists()){ errorMsg.textContent="Комната не найдена"; return; }
-
-    enterRoom(false);
-  }
-});
-
-// ==================== ENTER ROOM ====================
-async function enterRoom(isNew=false){
-  errorMsg.textContent="";
-  loginDiv.style.display="none";
-  roomDiv.style.display="block";
-  roomCodeSpan.textContent=roomId;
-
-  localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-
-  // Создаём комнату
-  if(isNew){
-    set(ref(db, `rooms/${roomId}`), { createdAt: Date.now() });
-  }
-
-  // Добавляем себя в комнату
-  set(ref(db, `rooms/${roomId}/peers/${peerId}`), { name, joinedAt: Date.now() });
-  window.addEventListener("beforeunload", ()=>{
-    remove(ref(db, `rooms/${roomId}/peers/${peerId}`));
-    cleanupRoom();
-  });
-
-  // Слушаем участников
-  const peersRef = ref(db, `rooms/${roomId}/peers`);
-  onChildAdded(peersRef, snapshot=>{
-    const otherId = snapshot.key;
-    const info = snapshot.val();
-    if(otherId===peerId) return;
-    if(!pcs[otherId]) createConnection(otherId, true, info);
-  });
-
-  onChildRemoved(peersRef, snapshot=>{
-    const id = snapshot.key;
-    if(document.getElementById(id)) document.getElementById(id).remove();
-    delete pcs[id];
-    cleanupRoom();
-  });
-
-  // Слушаем сигналы
-  const signalsRef = ref(db, `rooms/${roomId}/signals/${peerId}`);
-  onChildAdded(signalsRef, snapshot=>{
-    const signal = snapshot.val();
-    if(!pcs[signal.from]) createConnection(signal.from, false, null, signal);
-    else if(signal.sdp) pcs[signal.from].pc.setRemoteDescription(signal.sdp).catch(console.error);
-    else if(signal.candidate) pcs[signal.from].pc.addIceCandidate(signal.candidate).catch(console.error);
-  });
-}
-
-// ==================== CLEANUP ROOM ====================
-async function cleanupRoom(){
-  const peersSnap = await get(ref(db, `rooms/${roomId}/peers`));
-  if(!peersSnap.exists()){
-    remove(ref(db, `rooms/${roomId}`));
-  }
-}
-
-// ==================== PEER CONNECTION ====================
-function createConnection(otherId, isInitiator, info, signal){
-  const pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
-  pcs[otherId] = { pc, dc: null };
-
-  localStream.getTracks().forEach(track=>pc.addTrack(track, localStream));
-
-  pc.ontrack = e=>{
-    addParticipant(otherId, info?.name || "Участник", e.streams[0]);
-  };
-
-  pc.onicecandidate = e=>{
-    if(e.candidate){
-      push(ref(db, `rooms/${roomId}/signals/${otherId}`), { from:peerId, candidate:e.candidate });
-    }
-  };
-
-  // DATA CHANNEL
-  if(isInitiator){
-    const dc = pc.createDataChannel("chat");
-    setupDataChannel(otherId, dc);
-  } else {
-    pc.ondatachannel = e=>{
-      setupDataChannel(otherId, e.channel);
-    };
-  }
-
-  // Оффер/ответ
-  if(isInitiator){
-    pc.createOffer().then(offer=>{
-      pc.setLocalDescription(offer);
-      push(ref(db, `rooms/${roomId}/signals/${otherId}`), { from:peerId, sdp:offer });
-    });
-  } else if(signal && signal.sdp){
-    pc.setRemoteDescription(signal.sdp).then(()=>{
-      pc.createAnswer().then(answer=>{
-        pc.setLocalDescription(answer);
-        push(ref(db, `rooms/${roomId}/signals/${otherId}`), { from:peerId, sdp:answer });
+      // === Auth: ensure anonymous login ===
+      let authReady = false;
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          peerId = user.uid;
+          authReady = true;
+        } else {
+          await signInAnonymously(auth);
+        }
       });
-    });
-  }
-}
 
-// ==================== DATA CHANNEL SETUP ====================
-function setupDataChannel(otherId, dc){
-  pcs[otherId].dc = dc;
-  messageQueue[otherId] = [];
-  dc.onopen = ()=>{
-    // отправляем все отложенные сообщения
-    messageQueue[otherId].forEach(msg => dc.send(JSON.stringify(msg)));
-    messageQueue[otherId] = [];
-  };
-  dc.onmessage = e=>{
-    const msg = JSON.parse(e.data);
-    addChatMessage(msg.from,msg.text);
-  };
-}
+      // === Login UI ===
+      document.getElementById("createBtn").onclick = () => {
+        name = document.getElementById("nameInput").value.trim();
+        if (!name) {
+          showError("Введите имя");
+          return;
+        }
+        if (!authReady || !peerId) {
+          showError("Инициализация...");
+          return;
+        }
+        roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+        enterRoom(true);
+      };
 
-// ==================== UI ====================
-function addParticipant(id,name,stream){
-  if(document.getElementById(id)) return;
-  const div = document.createElement("div");
-  div.id=id;
-  div.className="participant";
-  div.textContent=name;
-  const audio=document.createElement("audio");
-  audio.srcObject=stream;
-  audio.autoplay=true;
-  div.appendChild(audio);
-  participantsDiv.appendChild(div);
-}
+      document.getElementById("joinBtn").onclick = () => {
+        roomInput.style.display = "block";
+        roomInput.focus();
+      };
 
-// ==================== CHAT ====================
-document.getElementById("sendBtn").onclick = ()=>{
-  const text = chatInput.value.trim();
-  if(!text) return;
-  const msg = { from:name, text };
-  for(let p in pcs){
-    const dc = pcs[p].dc;
-    if(dc && dc.readyState==="open"){
-      dc.send(JSON.stringify(msg));
-    } else {
-      messageQueue[p].push(msg);
-    }
-  }
-  addChatMessage("Я",text);
-  chatInput.value="";
-};
-function addChatMessage(sender,text){
-  const div=document.createElement("div");
-  div.textContent=`${sender}: ${text}`;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop=chatMessages.scrollHeight;
-}
+      roomInput.addEventListener("keypress", async (e) => {
+        if (e.key === "Enter") {
+          name = document.getElementById("nameInput").value.trim();
+          roomId = roomInput.value.trim().toUpperCase();
+          if (!name || !roomId) {
+            showError("Введите имя и код комнаты");
+            return;
+          }
+          if (!authReady || !peerId) {
+            showError("Инициализация...");
+            return;
+          }
+          const roomExists = (await get(ref(db, `rooms/${roomId}`))).exists();
+          if (!roomExists) {
+            showError("Комната не найдена");
+            return;
+          }
+          enterRoom(false);
+        }
+      });
 
-</script>
-</div>
+      // === Enter Room ===
+      async function enterRoom(isNew) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+          showError("Доступ к микрофону запрещён");
+          return;
+        }
+
+        loginDiv.style.display = "none";
+        roomDiv.style.display = "block";
+        roomCodeSpan.textContent = roomId;
+
+        if (isNew) {
+          await set(ref(db, `rooms/${roomId}`), { createdAt: Date.now() });
+        }
+
+        // Add self to peers using auth.uid
+        await set(ref(db, `rooms/${roomId}/peers/${peerId}`), {
+          name,
+          joinedAt: Date.now()
+        });
+
+        window.addEventListener("beforeunload", async () => {
+          await remove(ref(db, `rooms/${roomId}/peers/${peerId}`));
+          for (const id in pcs) cleanupPeer(id);
+          await cleanupRoom();
+        });
+
+        // Listen to peers
+        const peersRef = ref(db, `rooms/${roomId}/peers`);
+        onChildAdded(peersRef, (snapshot) => {
+          const otherId = snapshot.key;
+          const info = snapshot.val();
+          if (otherId === peerId || pcs[otherId]) return;
+          if (otherId > peerId) {
+            createConnection(otherId, true, info);
+          }
+        });
+
+        onChildRemoved(peersRef, (snapshot) => {
+          cleanupPeer(snapshot.key);
+          cleanupRoom();
+        });
+
+        // Listen to signals
+        const signalsRef = ref(db, `rooms/${roomId}/signals/${peerId}`);
+        onChildAdded(signalsRef, (snapshot) => {
+          const signal = snapshot.val();
+          if (!signal?.from) return;
+          if (!pcs[signal.from]) {
+            createConnection(signal.from, false, null, signal);
+          } else {
+            const pc = pcs[signal.from].pc;
+            if (signal.sdp) {
+              pc.setRemoteDescription(signal.sdp).catch(console.error);
+            } else if (signal.candidate) {
+              pc.addIceCandidate(signal.candidate).catch(console.error);
+            }
+          }
+        });
+      }
+
+      // === WebRTC ===
+      function createConnection(otherId, isInitiator, info, signal = null) {
+        const pc = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+        });
+        pcs[otherId] = { pc, dc: null };
+
+        localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+        pc.ontrack = (e) => {
+          addParticipant(otherId, info?.name || "Участник", e.streams[0]);
+        };
+
+        pc.onicecandidate = (e) => {
+          if (e.candidate) {
+            push(ref(db, `rooms/${roomId}/signals/${otherId}`), {
+              from: peerId,
+              candidate: e.candidate
+            });
+          }
+        };
+
+        if (isInitiator) {
+          const dc = pc.createDataChannel("chat");
+          setupDataChannel(otherId, dc);
+        } else {
+          pc.ondatachannel = (e) => setupDataChannel(otherId, e.channel);
+        }
+
+        if (isInitiator) {
+          pc.createOffer()
+            .then((offer) => pc.setLocalDescription(offer))
+            .then(() =>
+              push(ref(db, `rooms/${roomId}/signals/${otherId}`), {
+                from: peerId,
+                sdp: pc.localDescription
+              })
+            )
+            .catch(console.error);
+        } else if (signal?.sdp) {
+          pc.setRemoteDescription(signal.sdp)
+            .then(() => pc.createAnswer())
+            .then((answer) => pc.setLocalDescription(answer))
+            .then(() =>
+              push(ref(db, `rooms/${roomId}/signals/${otherId}`), {
+                from: peerId,
+                sdp: pc.localDescription
+              })
+            )
+            .catch(console.error);
+        }
+      }
+
+      // === DataChannel ===
+      function setupDataChannel(otherId, dc) {
+        pcs[otherId].dc = dc;
+        messageQueue[otherId] = messageQueue[otherId] || [];
+
+        dc.onopen = () => {
+          messageQueue[otherId].forEach((msg) => dc.send(JSON.stringify(msg)));
+          messageQueue[otherId] = [];
+        };
+
+        dc.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            addChatMessage(msg.from, msg.text);
+          } catch (err) {
+            console.warn("Invalid message", e.data);
+          }
+        };
+      }
+
+      // === UI ===
+      function addParticipant(id, name, stream) {
+        if (document.getElementById(id)) return;
+        const div = document.createElement("div");
+        div.id = id;
+        div.className = "participant";
+        div.textContent = name;
+        const audio = document.createElement("audio");
+        audio.srcObject = stream;
+        audio.autoplay = true;
+        div.appendChild(audio);
+        participantsDiv.appendChild(div);
+      }
+
+      function addChatMessage(sender, text) {
+        const div = document.createElement("div");
+        div.textContent = `${sender}: ${text}`;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      // === Chat ===
+      document.getElementById("sendBtn").onclick = () => {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        const msg = { from: name, text };
+        for (const p in pcs) {
+          const dc = pcs[p]?.dc;
+          if (dc && dc.readyState === "open") {
+            dc.send(JSON.stringify(msg));
+          } else {
+            messageQueue[p] = messageQueue[p] || [];
+            messageQueue[p].push(msg);
+          }
+        }
+        addChatMessage("Я", text);
+        chatInput.value = "";
+      };
+
+      chatInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") document.getElementById("sendBtn").click();
+      });
+    </script>
+  </div>
 </body>
 </html>
