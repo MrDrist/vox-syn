@@ -50,9 +50,9 @@ button:hover { background:#4c4cff; }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getDatabase, ref, set, push, onChildAdded, get, child, remove } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+import { getDatabase, ref, set, push, onChildAdded, get, remove, onChildRemoved } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-// ==================== CONFIG FIREBASE ====================
+// ==================== CONFIG ====================
 const firebaseConfig = {
   apiKey: "AIzaSyDuvwoM4s3EzM1tSRiyvhKFlkNsLlMNIbE",
   authDomain: "vox-signal.firebaseapp.com",
@@ -72,7 +72,10 @@ let name = "";
 let roomId = "";
 let peerId = Math.random().toString(36).substring(2,10);
 
-// UI elements
+// Для очереди сообщений пока DataChannel не открыт
+const messageQueue = {};
+
+// UI
 const loginDiv = document.getElementById("login");
 const roomDiv = document.getElementById("room");
 const participantsDiv = document.getElementById("participants");
@@ -82,12 +85,12 @@ const chatInput = document.getElementById("chatInput");
 const roomInput = document.getElementById("roomInput");
 const errorMsg = document.getElementById("errorMsg");
 
-// ==================== LOGIN LOGIC ====================
+// ==================== LOGIN ====================
 document.getElementById("createBtn").onclick = ()=>{
   name = document.getElementById("nameInput").value.trim();
   if(!name){ errorMsg.textContent="Введите имя"; return; }
-  roomId = Math.random().toString(36).substring(2,8); // генерируем код комнаты
-  enterRoom(true); // true = создаём новую комнату
+  roomId = Math.random().toString(36).substring(2,8);
+  enterRoom(true);
 };
 
 document.getElementById("joinBtn").onclick = ()=>{
@@ -118,16 +121,17 @@ async function enterRoom(isNew=false){
   roomCodeSpan.textContent=roomId;
 
   localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-  
-  // Создаём комнату, если новая
+
+  // Создаём комнату
   if(isNew){
     set(ref(db, `rooms/${roomId}`), { createdAt: Date.now() });
   }
 
   // Добавляем себя в комнату
-  set(ref(db, `rooms/${roomId}/peers/${peerId}`), { name, joinedAt:Date.now() });
+  set(ref(db, `rooms/${roomId}/peers/${peerId}`), { name, joinedAt: Date.now() });
   window.addEventListener("beforeunload", ()=>{
     remove(ref(db, `rooms/${roomId}/peers/${peerId}`));
+    cleanupRoom();
   });
 
   // Слушаем участников
@@ -137,6 +141,13 @@ async function enterRoom(isNew=false){
     const info = snapshot.val();
     if(otherId===peerId) return;
     if(!pcs[otherId]) createConnection(otherId, true, info);
+  });
+
+  onChildRemoved(peersRef, snapshot=>{
+    const id = snapshot.key;
+    if(document.getElementById(id)) document.getElementById(id).remove();
+    delete pcs[id];
+    cleanupRoom();
   });
 
   // Слушаем сигналы
@@ -149,10 +160,18 @@ async function enterRoom(isNew=false){
   });
 }
 
+// ==================== CLEANUP ROOM ====================
+async function cleanupRoom(){
+  const peersSnap = await get(ref(db, `rooms/${roomId}/peers`));
+  if(!peersSnap.exists()){
+    remove(ref(db, `rooms/${roomId}`));
+  }
+}
+
 // ==================== PEER CONNECTION ====================
 function createConnection(otherId, isInitiator, info, signal){
   const pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
-  pcs[otherId] = { pc };
+  pcs[otherId] = { pc, dc: null };
 
   localStream.getTracks().forEach(track=>pc.addTrack(track, localStream));
 
@@ -166,28 +185,23 @@ function createConnection(otherId, isInitiator, info, signal){
     }
   };
 
-  // DATA CHANNEL для чата
+  // DATA CHANNEL
   if(isInitiator){
     const dc = pc.createDataChannel("chat");
-    pcs[otherId].dc = dc;
-    dc.onmessage=e=>{
-      const msg=JSON.parse(e.data); addChatMessage(msg.from,msg.text);
-    };
-  }else{
-    pc.ondatachannel=e=>{
-      pcs[otherId].dc = e.channel;
-      e.channel.onmessage=e2=>{
-        const msg=JSON.parse(e2.data); addChatMessage(msg.from,msg.text);
-      };
+    setupDataChannel(otherId, dc);
+  } else {
+    pc.ondatachannel = e=>{
+      setupDataChannel(otherId, e.channel);
     };
   }
 
+  // Оффер/ответ
   if(isInitiator){
     pc.createOffer().then(offer=>{
       pc.setLocalDescription(offer);
       push(ref(db, `rooms/${roomId}/signals/${otherId}`), { from:peerId, sdp:offer });
     });
-  }else if(signal&&signal.sdp){
+  } else if(signal && signal.sdp){
     pc.setRemoteDescription(signal.sdp).then(()=>{
       pc.createAnswer().then(answer=>{
         pc.setLocalDescription(answer);
@@ -197,10 +211,25 @@ function createConnection(otherId, isInitiator, info, signal){
   }
 }
 
+// ==================== DATA CHANNEL SETUP ====================
+function setupDataChannel(otherId, dc){
+  pcs[otherId].dc = dc;
+  messageQueue[otherId] = [];
+  dc.onopen = ()=>{
+    // отправляем все отложенные сообщения
+    messageQueue[otherId].forEach(msg => dc.send(JSON.stringify(msg)));
+    messageQueue[otherId] = [];
+  };
+  dc.onmessage = e=>{
+    const msg = JSON.parse(e.data);
+    addChatMessage(msg.from,msg.text);
+  };
+}
+
 // ==================== UI ====================
 function addParticipant(id,name,stream){
   if(document.getElementById(id)) return;
-  const div=document.createElement("div");
+  const div = document.createElement("div");
   div.id=id;
   div.className="participant";
   div.textContent=name;
@@ -213,9 +242,17 @@ function addParticipant(id,name,stream){
 
 // ==================== CHAT ====================
 document.getElementById("sendBtn").onclick = ()=>{
-  const text=chatInput.value.trim();
+  const text = chatInput.value.trim();
   if(!text) return;
-  for(let p in pcs) pcs[p].dc.send(JSON.stringify({ from:name,text }));
+  const msg = { from:name, text };
+  for(let p in pcs){
+    const dc = pcs[p].dc;
+    if(dc && dc.readyState==="open"){
+      dc.send(JSON.stringify(msg));
+    } else {
+      messageQueue[p].push(msg);
+    }
+  }
   addChatMessage("Я",text);
   chatInput.value="";
 };
