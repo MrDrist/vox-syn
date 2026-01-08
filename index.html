@@ -4,34 +4,46 @@
 <meta charset="UTF-8">
 <title>Vox Syn Audio Chat</title>
 <style>
-body { font-family: Arial; background: #f5f5f5; margin: 0; padding: 20px; }
-#login, #room { max-width: 600px; margin: auto; }
-#participants { margin-top: 20px; }
-.participant { padding: 10px; margin: 5px 0; background: #fff; border: 1px solid #ccc; border-radius: 5px; }
-#chat { margin-top: 20px; }
-#chatMessages { height: 150px; overflow-y: auto; background: #fff; padding: 5px; border: 1px solid #ccc; }
-#chatInput { width: 80%; }
+  body { margin:0; font-family: 'Segoe UI', sans-serif; background: #1e1e2f; color:#fff; }
+  .container { max-width: 800px; margin: auto; padding: 20px; }
+  h1 { text-align:center; margin-bottom:30px; }
+  #login { display:flex; flex-direction:column; align-items:center; gap:15px; }
+  input { padding:10px; font-size:16px; border-radius:5px; border:none; width:200px; text-align:center; }
+  button { padding:10px 20px; font-size:16px; border-radius:5px; border:none; cursor:pointer; transition:0.2s; }
+  button:hover { background:#4c4cff; }
+  #room { display:none; margin-top:20px; }
+  #participants { display:flex; flex-wrap: wrap; gap:10px; margin-bottom:20px; }
+  .participant { background:#2c2c44; padding:10px; border-radius:8px; min-width:120px; text-align:center; }
+  .participant audio { width:100%; margin-top:5px; border-radius:5px; }
+  #chat { background:#2c2c44; padding:10px; border-radius:8px; }
+  #chatMessages { height:150px; overflow-y:auto; padding:5px; border:1px solid #555; margin-bottom:5px; background:#1e1e2f; border-radius:5px; }
+  #chatInput { width:70%; padding:5px; border-radius:5px; border:none; }
+  #sendBtn { padding:6px 12px; border-radius:5px; border:none; cursor:pointer; background:#4c4cff; color:#fff; margin-left:5px; }
 </style>
 </head>
 <body>
+<div class="container">
+
+<h1>Vox Syn Audio Chat</h1>
 
 <div id="login">
-<h2>Vox Syn Audio Chat</h2>
-<input id="nameInput" placeholder="Ваше имя" />
-<input id="roomInput" placeholder="Код комнаты" />
-<button id="joinBtn">Войти в комнату</button>
+  <input id="nameInput" placeholder="Ваше имя" />
+  <div>
+    <button id="createBtn">Создать комнату</button>
+    <button id="joinBtn">Подключиться</button>
+  </div>
+  <input id="roomInput" placeholder="Код комнаты" style="display:none; margin-top:10px;" />
 </div>
 
-<div id="room" style="display:none;">
-<h2>Комната: <span id="roomCode"></span></h2>
-<div id="participants"></div>
-
-<div id="chat">
-<h3>Чат</h3>
-<div id="chatMessages"></div>
-<input id="chatInput" placeholder="Написать сообщение..." />
-<button id="sendBtn">Отправить</button>
-</div>
+<div id="room">
+  <h2>Комната: <span id="roomCode"></span></h2>
+  <div id="participants"></div>
+  <div id="chat">
+    <h3>Чат</h3>
+    <div id="chatMessages"></div>
+    <input id="chatInput" placeholder="Написать сообщение..." />
+    <button id="sendBtn">Отправить</button>
+  </div>
 </div>
 
 <script type="module">
@@ -65,41 +77,56 @@ const participantsDiv = document.getElementById("participants");
 const roomCodeSpan = document.getElementById("roomCode");
 const chatMessages = document.getElementById("chatMessages");
 const chatInput = document.getElementById("chatInput");
+const roomInput = document.getElementById("roomInput");
 
-// ==================== LOGIN ====================
-document.getElementById("joinBtn").onclick = async () => {
+// ==================== LOGIN LOGIC ====================
+document.getElementById("createBtn").onclick = ()=>{
   name = document.getElementById("nameInput").value.trim();
-  roomId = document.getElementById("roomInput").value.trim();
-  if(!name || !roomId) { alert("Введите имя и код комнаты"); return; }
-
-  loginDiv.style.display="none";
-  roomDiv.style.display="block";
-  roomCodeSpan.textContent = roomId;
-
-  await startAudioChat();
+  if(!name) { alert("Введите имя"); return; }
+  roomId = Math.random().toString(36).substring(2,8); // генерируем код комнаты
+  enterRoom();
 };
 
-// ==================== START AUDIO CHAT ====================
-async function startAudioChat() {
-  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+document.getElementById("joinBtn").onclick = ()=>{
+  roomInput.style.display="block";
+  roomInput.focus();
+};
+
+roomInput.addEventListener("keypress", e=>{
+  if(e.key==="Enter"){
+    name = document.getElementById("nameInput").value.trim();
+    roomId = roomInput.value.trim();
+    if(!name||!roomId){ alert("Введите имя и код комнаты"); return; }
+    enterRoom();
+  }
+});
+
+// ==================== ENTER ROOM ====================
+async function enterRoom(){
+  loginDiv.style.display="none";
+  roomDiv.style.display="block";
+  roomCodeSpan.textContent=roomId;
+
+  localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
   
   // Добавляем себя в комнату
-  set(ref(db, `rooms/${roomId}/peers/${peerId}`), { name, joinedAt: Date.now() });
-  window.addEventListener("beforeunload", () => {
+  set(ref(db, `rooms/${roomId}/peers/${peerId}`), { name, joinedAt:Date.now() });
+  window.addEventListener("beforeunload", ()=>{
     remove(ref(db, `rooms/${roomId}/peers/${peerId}`));
   });
 
-  // Слушаем новых участников
+  // Слушаем участников
   const peersRef = ref(db, `rooms/${roomId}/peers`);
-  onChildAdded(peersRef, snapshot => {
-    const otherPeerId = snapshot.key;
-    if(otherPeerId === peerId) return;
-    if(!pcs[otherPeerId]) createConnection(otherPeerId, true, snapshot.val());
+  onChildAdded(peersRef, snapshot=>{
+    const otherId = snapshot.key;
+    const info = snapshot.val();
+    if(otherId===peerId) return;
+    if(!pcs[otherId]) createConnection(otherId, true, info);
   });
 
   // Слушаем сигналы
   const signalsRef = ref(db, `rooms/${roomId}/signals/${peerId}`);
-  onChildAdded(signalsRef, snapshot => {
+  onChildAdded(signalsRef, snapshot=>{
     const signal = snapshot.val();
     if(!pcs[signal.from]) createConnection(signal.from, false, null, signal);
     else if(signal.sdp) pcs[signal.from].pc.setRemoteDescription(signal.sdp).catch(console.error);
@@ -107,100 +134,83 @@ async function startAudioChat() {
   });
 }
 
-// ==================== CREATE PEER CONNECTION ====================
-function createConnection(otherPeerId, isInitiator, peerInfo, signal) {
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-  pcs[otherPeerId] = { pc };
+// ==================== PEER CONNECTION ====================
+function createConnection(otherId, isInitiator, info, signal){
+  const pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
+  pcs[otherId] = { pc };
 
-  // Добавляем локальный аудио трек
-  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  localStream.getTracks().forEach(track=>pc.addTrack(track, localStream));
 
-  // Получаем удалённый поток
-  pc.ontrack = event => {
-    addParticipant(otherPeerId, peerInfo?.name || "Участник", event.streams[0]);
+  pc.ontrack = e=>{
+    addParticipant(otherId, info?.name || "Участник", e.streams[0]);
   };
 
-  // ICE candidates
-  pc.onicecandidate = event => {
-    if(event.candidate) {
-      push(ref(db, `rooms/${roomId}/signals/${otherPeerId}`), {
-        from: peerId,
-        candidate: event.candidate
-      });
+  pc.onicecandidate = e=>{
+    if(e.candidate){
+      push(ref(db, `rooms/${roomId}/signals/${otherId}`), { from:peerId, candidate:e.candidate });
     }
   };
 
-  // DATA CHANNEL для чата
-  if(isInitiator) {
+  if(isInitiator){
     const dc = pc.createDataChannel("chat");
-    pcs[otherPeerId].dc = dc;
-    dc.onmessage = e => {
-      const msg = JSON.parse(e.data);
-      addChatMessage(msg.from, msg.text);
+    pcs[otherId].dc = dc;
+    dc.onmessage=e=>{
+      const msg=JSON.parse(e.data); addChatMessage(msg.from,msg.text);
     };
-  } else {
-    pc.ondatachannel = e => {
-      pcs[otherPeerId].dc = e.channel;
-      e.channel.onmessage = e2 => {
-        const msg = JSON.parse(e2.data);
-        addChatMessage(msg.from, msg.text);
+  }else{
+    pc.ondatachannel=e=>{
+      pcs[otherId].dc = e.channel;
+      e.channel.onmessage=e2=>{
+        const msg=JSON.parse(e2.data); addChatMessage(msg.from,msg.text);
       };
     };
   }
 
-  // Инициатор создаёт оффер
-  if(isInitiator) {
-    pc.createOffer().then(offer => {
+  if(isInitiator){
+    pc.createOffer().then(offer=>{
       pc.setLocalDescription(offer);
-      push(ref(db, `rooms/${roomId}/signals/${otherPeerId}`), {
-        from: peerId,
-        sdp: offer
-      });
+      push(ref(db, `rooms/${roomId}/signals/${otherId}`), { from:peerId, sdp:offer });
     });
-  } else if(signal && signal.sdp) {
+  }else if(signal&&signal.sdp){
     pc.setRemoteDescription(signal.sdp).then(()=>{
       pc.createAnswer().then(answer=>{
         pc.setLocalDescription(answer);
-        push(ref(db, `rooms/${roomId}/signals/${otherPeerId}`), {
-          from: peerId,
-          sdp: answer
-        });
+        push(ref(db, `rooms/${roomId}/signals/${otherId}`), { from:peerId, sdp:answer });
       });
     });
   }
 }
 
 // ==================== UI ====================
-function addParticipant(id, name, stream) {
+function addParticipant(id,name,stream){
   if(document.getElementById(id)) return;
-  const div = document.createElement("div");
-  div.id = id;
-  div.className = "participant";
-  div.textContent = name;
-  const audio = document.createElement("audio");
-  audio.srcObject = stream;
-  audio.autoplay = true;
+  const div=document.createElement("div");
+  div.id=id;
+  div.className="participant";
+  div.textContent=name;
+  const audio=document.createElement("audio");
+  audio.srcObject=stream;
+  audio.autoplay=true;
   div.appendChild(audio);
   participantsDiv.appendChild(div);
 }
 
 // ==================== CHAT ====================
 document.getElementById("sendBtn").onclick = ()=>{
-  const text = chatInput.value.trim();
+  const text=chatInput.value.trim();
   if(!text) return;
-  for(let p in pcs) {
-    pcs[p].dc.send(JSON.stringify({ from: name, text }));
-  }
-  addChatMessage("Я", text);
+  for(let p in pcs) pcs[p].dc.send(JSON.stringify({ from:name,text }));
+  addChatMessage("Я",text);
   chatInput.value="";
 };
-function addChatMessage(sender, text){
-  const div = document.createElement("div");
-  div.textContent = `${sender}: ${text}`;
+function addChatMessage(sender,text){
+  const div=document.createElement("div");
+  div.textContent=`${sender}: ${text}`;
   chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+  chatMessages.scrollTop=chatMessages.scrollHeight;
 }
 
 </script>
+</div>
 </body>
 </html>
