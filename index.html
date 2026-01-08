@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vox Syn Text Chat</title>
-  <!-- Favicon: ваш зелёный градиентный овал -->
+  <!-- Favicon: зелёный градиентный овал -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='grad' x1='0%' y1='0%' x2='0%' y2='100%'%3E%3Cstop offset='0%' stop-color='%2300ff00'/%3E%3Cstop offset='100%' stop-color='%23008000'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='32' fill='url(%23grad)'/%3E%3C/svg%3E" type="image/svg+xml" />
   <style>
     * {
@@ -25,23 +25,31 @@
       --accent-hover: #5d5dff;
       --success: #55ff55;
       --error: #ff5555;
+      --host: #ffd700;
     }
 
     body {
       background-color: var(--bg-primary);
       color: var(--text-primary);
       line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     .container {
       max-width: 1100px;
+      width: 100%;
       margin: 0 auto;
       padding: 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
 
     header {
       text-align: center;
-      margin-bottom: 30px;
+      margin-bottom: 24px;
     }
 
     h1 {
@@ -58,7 +66,6 @@
       font-size: 1rem;
     }
 
-    /* Общие карточки */
     .card {
       background: var(--bg-panel);
       border-radius: 12px;
@@ -82,11 +89,6 @@
       width: 100%;
       max-width: 300px;
       text-align: center;
-    }
-
-    input:focus {
-      outline: none;
-      border-color: var(--accent);
     }
 
     .btn {
@@ -114,13 +116,7 @@
 
     .toggle-link {
       color: var(--accent);
-      text-decoration: none;
-      font-size: 15px;
-      margin-top: 8px;
       cursor: pointer;
-    }
-
-    .toggle-link:hover {
       text-decoration: underline;
     }
 
@@ -131,24 +127,31 @@
       min-height: 22px;
     }
 
-    /* Комнаты */
+    #room {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
     .room-container {
       display: flex;
       gap: 24px;
-      margin-top: 20px;
+      flex: 1;
+      min-height: 0;
     }
 
     .chat-panel {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      min-height: 0;
     }
 
     .room-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 16px;
     }
 
     .room-title {
@@ -156,26 +159,20 @@
       color: var(--accent);
     }
 
-    .logout-btn {
-      background: #ff4d4d;
-      padding: 6px 12px;
-      font-size: 14px;
-      margin-top: 10px;
-    }
-
-    .logout-btn:hover {
-      background: #ff6666;
-    }
-
-    /* Чат */
-    #chatMessages {
+    /* Чат — статичный контейнер с прокруткой ТОЛЬКО сообщений */
+    #chatBox {
       flex: 1;
-      height: 450px;
-      overflow-y: auto;
-      padding: 16px;
+      min-height: 0;
       background: rgba(0, 0, 0, 0.2);
       border-radius: 10px;
       border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    #chatMessages {
+      height: 100%;
+      overflow-y: auto;
+      padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 14px;
@@ -204,14 +201,10 @@
       color: var(--text-secondary);
     }
 
-    .message-text {
-      word-wrap: break-word;
-      line-height: 1.4;
-    }
-
     .input-area {
       display: flex;
       gap: 10px;
+      margin-top: 12px;
     }
 
     #chatInput {
@@ -230,10 +223,8 @@
       background: var(--bg-panel);
       border-radius: 12px;
       padding: 20px;
-      height: fit-content;
-      align-self: flex-start;
-      position: sticky;
-      top: 20px;
+      display: flex;
+      flex-direction: column;
     }
 
     .participants-title {
@@ -246,12 +237,15 @@
 
     .participants-list {
       list-style: none;
+      flex: 1;
+      overflow-y: auto;
     }
 
     .participant-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       padding: 8px 0;
-      color: var(--success);
-      font-size: 15px;
       border-bottom: 1px solid rgba(90, 90, 120, 0.3);
     }
 
@@ -259,18 +253,58 @@
       border-bottom: none;
     }
 
-    /* Скрытие экранов */
-    #auth, #login, #room {
+    .participant-name {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .host-badge {
+      color: var(--host);
+      font-size: 1.1rem;
+    }
+
+    .kick-btn {
+      background: #ff4d4d;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      opacity: 0.8;
+    }
+
+    .kick-btn:hover {
+      opacity: 1;
+      background: #ff3333;
+    }
+
+    #auth, #login {
       display: none;
     }
 
-    /* Адаптив */
+    #logoutContainer {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .logout-btn {
+      background: #ff4d4d;
+      padding: 8px 16px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+    }
+
     @media (max-width: 900px) {
       .room-container {
         flex-direction: column;
       }
       .participants-panel {
-        position: static;
         width: 100%;
       }
     }
@@ -280,10 +314,9 @@
   <div class="container">
     <header>
       <h1>Vox Syn Text Chat</h1>
-      <p class="subtitle">Безопасный многопользовательский чат в реальном времени</p>
+      <p class="subtitle">Хост может управлять комнатой</p>
     </header>
 
-    <!-- Auth Screen -->
     <div id="auth" class="card">
       <div class="form-group">
         <input id="emailInput" type="email" placeholder="Ваш email" />
@@ -300,7 +333,6 @@
       </div>
     </div>
 
-    <!-- Room Join/Create -->
     <div id="login" class="card">
       <div class="form-group">
         <input id="nameInput" placeholder="Ваше имя в чате" maxlength="20" />
@@ -313,14 +345,15 @@
       </div>
     </div>
 
-    <!-- Room -->
     <div id="room">
       <div class="room-container">
         <div class="chat-panel">
           <div class="room-header">
             <div class="room-title">Комната: <span id="roomCode"></span></div>
           </div>
-          <div id="chatMessages"></div>
+          <div id="chatBox">
+            <div id="chatMessages"></div>
+          </div>
           <div class="input-area">
             <input id="chatInput" placeholder="Напишите сообщение..." maxlength="280" />
             <button id="sendBtn" class="btn">Отправить</button>
@@ -333,10 +366,13 @@
         </div>
       </div>
     </div>
+
+    <div id="logoutContainer">
+      <button id="logoutBtn" class="logout-btn" style="display: none;">Выйти</button>
+    </div>
   </div>
 
   <script type="module">
-    // === Firebase SDK ===
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
     import {
       getAuth,
@@ -353,10 +389,10 @@
       onChildAdded,
       onChildRemoved,
       get,
-      remove
+      remove,
+      update
     } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-    // === Firebase Config ===
     const firebaseConfig = {
       apiKey: "AIzaSyDuvwoM4s3EzM1tSRiyvhKFlkNsLlMNIbE",
       authDomain: "vox-signal.firebaseapp.com",
@@ -371,12 +407,12 @@
     const auth = getAuth(app);
     const db = getDatabase(app);
 
-    // === State ===
     let displayName = "";
     let roomId = "";
     let userId = null;
+    let isHost = false;
+    let hostId = null;
 
-    // === UI Elements ===
     const authDiv = document.getElementById("auth");
     const loginDiv = document.getElementById("login");
     const roomDiv = document.getElementById("room");
@@ -386,8 +422,9 @@
     const participantsList = document.getElementById("participantsList");
     const errorMsg = document.getElementById("errorMsg");
     const errorMsg2 = document.getElementById("errorMsg2");
+    const logoutBtn = document.getElementById("logoutBtn");
 
-    // === Auth UI Toggle ===
+    // UI toggle
     document.getElementById("toggleToSignUp").onclick = () => {
       document.getElementById("signUpBtn").style.display = "inline-block";
       document.getElementById("signInBtn").style.display = "none";
@@ -401,7 +438,6 @@
       document.getElementById("toggleToSignUp").style.display = "inline";
     };
 
-    // === Error Handlers ===
     function showError(msg) {
       errorMsg.textContent = msg;
       setTimeout(() => errorMsg.textContent = "", 5000);
@@ -411,7 +447,7 @@
       setTimeout(() => errorMsg2.textContent = "", 5000);
     }
 
-    // === Auth Functions ===
+    // Auth
     document.getElementById("signUpBtn").onclick = async () => {
       const email = document.getElementById("emailInput").value.trim();
       const password = document.getElementById("passwordInput").value;
@@ -419,10 +455,9 @@
       try {
         await createUserWithEmailAndPassword(auth, email, password);
       } catch (err) {
-        if (err.code === "auth/weak-password") showError("Пароль слишком короткий (мин. 6 символов)");
+        if (err.code === "auth/weak-password") showError("Пароль слишком короткий");
         else if (err.code === "auth/email-already-in-use") showError("Email уже используется");
-        else if (err.code === "auth/invalid-email") showError("Неверный формат email");
-        else if (err.code === "auth/operation-not-allowed") showError("Регистрация отключена в Firebase");
+        else if (err.code === "auth/invalid-email") showError("Неверный email");
         else showError("Ошибка: " + err.message);
       }
     };
@@ -434,26 +469,26 @@
       try {
         await signInWithEmailAndPassword(auth, email, password);
       } catch (err) {
-        if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password") showError("Неверный email или пароль");
-        else if (err.code === "auth/invalid-email") showError("Неверный формат email");
+        if (err.code === "auth/wrong-password") showError("Неверный email или пароль");
         else showError("Ошибка: " + err.message);
       }
     };
 
-    // === Auth State ===
     onAuthStateChanged(auth, (user) => {
       if (user) {
         userId = user.uid;
         authDiv.style.display = "none";
         loginDiv.style.display = "block";
+        logoutBtn.style.display = "inline-block";
       } else {
         authDiv.style.display = "block";
         loginDiv.style.display = "none";
         roomDiv.style.display = "none";
+        logoutBtn.style.display = "none";
       }
     });
 
-    // === Room Logic ===
+    // Room
     document.getElementById("createBtn").onclick = () => {
       displayName = document.getElementById("nameInput").value.trim();
       if (!displayName) return showError2("Введите имя в чате");
@@ -478,10 +513,21 @@
 
     async function enterRoom(isNew) {
       loginDiv.style.display = "none";
-      roomDiv.style.display = "block";
+      roomDiv.style.display = "flex";
       roomCodeSpan.textContent = roomId;
 
-      if (isNew) await set(ref(db, `rooms/${roomId}`), { createdAt: Date.now() });
+      if (isNew) {
+        await set(ref(db, `rooms/${roomId}`), {
+          createdAt: Date.now(),
+          hostId: userId
+        });
+        hostId = userId;
+        isHost = true;
+      } else {
+        const roomSnap = await get(ref(db, `rooms/${roomId}`));
+        hostId = roomSnap.val().hostId;
+        isHost = (hostId === userId);
+      }
 
       await set(ref(db, `rooms/${roomId}/peers/${userId}`), {
         name: displayName,
@@ -510,11 +556,12 @@
         chatMessages.scrollTop = chatMessages.scrollHeight;
       });
 
-      // Participants
+      // Peers
       const peersRef = ref(db, `rooms/${roomId}/peers`);
       onChildAdded(peersRef, (snapshot) => {
+        const peerId = snapshot.key;
         const peer = snapshot.val();
-        addParticipant(snapshot.key, peer.name);
+        addParticipant(peerId, peer.name);
       });
       onChildRemoved(peersRef, (snapshot) => {
         removeParticipant(snapshot.key);
@@ -523,11 +570,13 @@
       const peersSnap = await get(peersRef);
       participantsList.innerHTML = "";
       if (peersSnap.exists()) {
-        peersSnap.forEach(child => addParticipant(child.key, child.val().name));
+        peersSnap.forEach(child => {
+          addParticipant(child.key, child.val().name);
+        });
       }
     }
 
-    // === Chat ===
+    // Chat
     document.getElementById("sendBtn").onclick = sendMessage;
     chatInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
 
@@ -543,14 +592,36 @@
       chatInput.value = "";
     }
 
-    // === Participants UI ===
+    // Participants
     function addParticipant(id, name) {
       if (document.getElementById(`peer-${id}`)) return;
-      const li = document.createElement("li");
-      li.id = `peer-${id}`;
-      li.className = "participant-item";
-      li.textContent = name;
-      participantsList.appendChild(li);
+
+      const item = document.createElement("li");
+      item.id = `peer-${id}`;
+      item.className = "participant-item";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "participant-name";
+      nameSpan.textContent = name;
+      if (id === hostId) {
+        const crown = document.createElement("span");
+        crown.className = "host-badge";
+        crown.textContent = "👑";
+        nameSpan.appendChild(crown);
+      }
+
+      item.appendChild(nameSpan);
+
+      // Кнопка кика — только для хоста
+      if (isHost && id !== userId) {
+        const kickBtn = document.createElement("button");
+        kickBtn.className = "kick-btn";
+        kickBtn.textContent = "Кик";
+        kickBtn.onclick = () => kickUser(id);
+        item.appendChild(kickBtn);
+      }
+
+      participantsList.appendChild(item);
     }
 
     function removeParticipant(id) {
@@ -558,17 +629,21 @@
       if (el) el.remove();
     }
 
-    async function cleanupRoom() {
-      const snap = await get(ref(db, `rooms/${roomId}/peers`));
-      if (!snap.exists()) await remove(ref(db, `rooms/${roomId}`));
+    async function kickUser(userIdToKick) {
+      if (!isHost) return;
+      if (userIdToKick === userId) return;
+      await remove(ref(db, `rooms/${roomId}/peers/${userIdToKick}`));
+      // Firebase сам удалит запись, и onChildRemoved обновит UI
     }
 
-    // Logout button
-    const logoutBtn = document.createElement("button");
-    logoutBtn.className = "btn logout-btn";
-    logoutBtn.textContent = "Выйти";
+    async function cleanupRoom() {
+      const snap = await get(ref(db, `rooms/${roomId}/peers`));
+      if (!snap.exists()) {
+        await remove(ref(db, `rooms/${roomId}`));
+      }
+    }
+
     logoutBtn.onclick = () => signOut(auth);
-    document.querySelector(".container").appendChild(logoutBtn);
   </script>
 </body>
 </html>
