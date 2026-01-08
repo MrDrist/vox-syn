@@ -20,18 +20,22 @@
       text-align: center;
       margin-bottom: 30px;
     }
-    #login {
+    #auth, #login, #room {
+      display: none;
+    }
+    .form-group {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 15px;
+      gap: 10px;
+      margin: 10px 0;
     }
     input {
       padding: 10px;
       font-size: 16px;
       border-radius: 5px;
       border: none;
-      width: 200px;
+      width: 250px;
       text-align: center;
     }
     button {
@@ -48,7 +52,6 @@
       background: #5d5dff;
     }
     #room {
-      display: none;
       margin-top: 20px;
     }
     #participants {
@@ -103,22 +106,44 @@
       margin-top: 10px;
       text-align: center;
     }
+    .toggle-link {
+      color: #4c4cff;
+      cursor: pointer;
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Vox Syn Audio Chat</h1>
 
+    <!-- Auth Screen -->
+    <div id="auth">
+      <div class="form-group">
+        <input id="emailInput" type="email" placeholder="Email" />
+        <input id="passwordInput" type="password" placeholder="Пароль" />
+        <button id="signInBtn">Войти</button>
+        <button id="signUpBtn">Зарегистрироваться</button>
+        <div>
+          <span class="toggle-link" id="toggleToSignUp">Нет аккаунта?</span>
+          <span class="toggle-link" id="toggleToSignIn">Уже есть аккаунт?</span>
+        </div>
+        <div id="errorMsg"></div>
+      </div>
+    </div>
+
+    <!-- Room Join/Create -->
     <div id="login">
-      <input id="nameInput" placeholder="Ваше имя" maxlength="20" />
+      <input id="nameInput" placeholder="Ваше имя в чате" maxlength="20" />
       <div>
         <button id="createBtn">Создать комнату</button>
         <button id="joinBtn">Подключиться</button>
       </div>
       <input id="roomInput" placeholder="Код комнаты" style="display: none; margin-top: 10px;" maxlength="10" />
-      <div id="errorMsg"></div>
+      <div id="errorMsg2"></div>
     </div>
 
+    <!-- Room -->
     <div id="room">
       <h2>Комната: <span id="roomCode"></span></h2>
       <div id="participants"></div>
@@ -135,7 +160,9 @@
       import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
       import {
         getAuth,
-        signInAnonymously,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        signOut,
         onAuthStateChanged
       } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
       import {
@@ -160,7 +187,6 @@
         appId: "1:410698338678:web:316010281098e78af4ea57"
       };
 
-      // === Init ===
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const db = getDatabase(app);
@@ -168,12 +194,13 @@
       // === Globals ===
       let localStream = null;
       const pcs = {};
-      let name = "";
+      let displayName = "";
       let roomId = "";
-      let peerId = null; // ← будет auth.uid
+      let peerId = null;
       const messageQueue = {};
 
-      // === UI ===
+      // === UI Elements ===
+      const authDiv = document.getElementById("auth");
       const loginDiv = document.getElementById("login");
       const roomDiv = document.getElementById("room");
       const participantsDiv = document.getElementById("participants");
@@ -182,49 +209,79 @@
       const chatInput = document.getElementById("chatInput");
       const roomInput = document.getElementById("roomInput");
       const errorMsg = document.getElementById("errorMsg");
+      const errorMsg2 = document.getElementById("errorMsg2");
 
-      // === Utils ===
+      // === Toggle auth views ===
+      document.getElementById("toggleToSignUp").onclick = () => {
+        document.getElementById("signUpBtn").style.display = "block";
+        document.getElementById("signInBtn").style.display = "none";
+        document.getElementById("toggleToSignUp").style.display = "none";
+        document.getElementById("toggleToSignIn").style.display = "inline";
+      };
+      document.getElementById("toggleToSignIn").onclick = () => {
+        document.getElementById("signInBtn").style.display = "block";
+        document.getElementById("signUpBtn").style.display = "none";
+        document.getElementById("toggleToSignIn").style.display = "none";
+        document.getElementById("toggleToSignUp").style.display = "inline";
+      };
+
+      // === Auth Handlers ===
+      document.getElementById("signUpBtn").onclick = async () => {
+        const email = document.getElementById("emailInput").value.trim();
+        const password = document.getElementById("passwordInput").value;
+        if (!email || !password) {
+          showError("Введите email и пароль");
+          return;
+        }
+        try {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+          showError("Ошибка регистрации: " + (err.message || "неизвестно"));
+        }
+      };
+
+      document.getElementById("signInBtn").onclick = async () => {
+        const email = document.getElementById("emailInput").value.trim();
+        const password = document.getElementById("passwordInput").value;
+        if (!email || !password) {
+          showError("Введите email и пароль");
+          return;
+        }
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+          showError("Ошибка входа: " + (err.message || "неверный email/пароль"));
+        }
+      };
+
       function showError(msg) {
         errorMsg.textContent = msg;
         setTimeout(() => (errorMsg.textContent = ""), 5000);
       }
 
-      function cleanupPeer(otherId) {
-        if (pcs[otherId]) {
-          pcs[otherId].pc.close();
-          delete pcs[otherId];
-        }
-        const el = document.getElementById(otherId);
-        if (el) el.remove();
+      function showError2(msg) {
+        errorMsg2.textContent = msg;
+        setTimeout(() => (errorMsg2.textContent = ""), 5000);
       }
 
-      async function cleanupRoom() {
-        const snapshot = await get(ref(db, `rooms/${roomId}/peers`));
-        if (!snapshot.exists()) {
-          await remove(ref(db, `rooms/${roomId}`));
-        }
-      }
-
-      // === Auth: ensure anonymous login ===
-      let authReady = false;
-      onAuthStateChanged(auth, async (user) => {
+      // === Auth State Listener ===
+      onAuthStateChanged(auth, (user) => {
         if (user) {
           peerId = user.uid;
-          authReady = true;
+          authDiv.style.display = "none";
+          loginDiv.style.display = "block";
         } else {
-          await signInAnonymously(auth);
+          authDiv.style.display = "block";
+          loginDiv.style.display = "none";
+          roomDiv.style.display = "none";
         }
       });
 
-      // === Login UI ===
+      // === Room UI ===
       document.getElementById("createBtn").onclick = () => {
-        name = document.getElementById("nameInput").value.trim();
-        if (!name) {
-          showError("Введите имя");
-          return;
-        }
-        if (!authReady || !peerId) {
-          showError("Инициализация...");
+        displayName = document.getElementById("nameInput").value.trim();
+        if (!displayName) {
+          showError2("Введите имя в чате");
           return;
         }
         roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -238,19 +295,15 @@
 
       roomInput.addEventListener("keypress", async (e) => {
         if (e.key === "Enter") {
-          name = document.getElementById("nameInput").value.trim();
+          displayName = document.getElementById("nameInput").value.trim();
           roomId = roomInput.value.trim().toUpperCase();
-          if (!name || !roomId) {
-            showError("Введите имя и код комнаты");
-            return;
-          }
-          if (!authReady || !peerId) {
-            showError("Инициализация...");
+          if (!displayName || !roomId) {
+            showError2("Введите имя и код комнаты");
             return;
           }
           const roomExists = (await get(ref(db, `rooms/${roomId}`))).exists();
           if (!roomExists) {
-            showError("Комната не найдена");
+            showError2("Комната не найдена");
             return;
           }
           enterRoom(false);
@@ -262,7 +315,7 @@
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (err) {
-          showError("Доступ к микрофону запрещён");
+          showError2("Доступ к микрофону запрещён");
           return;
         }
 
@@ -274,9 +327,8 @@
           await set(ref(db, `rooms/${roomId}`), { createdAt: Date.now() });
         }
 
-        // Add self to peers using auth.uid
         await set(ref(db, `rooms/${roomId}/peers/${peerId}`), {
-          name,
+          name: displayName,
           joinedAt: Date.now()
         });
 
@@ -286,7 +338,6 @@
           await cleanupRoom();
         });
 
-        // Listen to peers
         const peersRef = ref(db, `rooms/${roomId}/peers`);
         onChildAdded(peersRef, (snapshot) => {
           const otherId = snapshot.key;
@@ -302,7 +353,6 @@
           cleanupRoom();
         });
 
-        // Listen to signals
         const signalsRef = ref(db, `rooms/${roomId}/signals/${peerId}`);
         onChildAdded(signalsRef, (snapshot) => {
           const signal = snapshot.val();
@@ -320,7 +370,23 @@
         });
       }
 
-      // === WebRTC ===
+      // === WebRTC & Utils (без изменений) ===
+      function cleanupPeer(otherId) {
+        if (pcs[otherId]) {
+          pcs[otherId].pc.close();
+          delete pcs[otherId];
+        }
+        const el = document.getElementById(otherId);
+        if (el) el.remove();
+      }
+
+      async function cleanupRoom() {
+        const snapshot = await get(ref(db, `rooms/${roomId}/peers`));
+        if (!snapshot.exists()) {
+          await remove(ref(db, `rooms/${roomId}`));
+        }
+      }
+
       function createConnection(otherId, isInitiator, info, signal = null) {
         const pc = new RTCPeerConnection({
           iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -373,7 +439,6 @@
         }
       }
 
-      // === DataChannel ===
       function setupDataChannel(otherId, dc) {
         pcs[otherId].dc = dc;
         messageQueue[otherId] = messageQueue[otherId] || [];
@@ -393,7 +458,6 @@
         };
       }
 
-      // === UI ===
       function addParticipant(id, name, stream) {
         if (document.getElementById(id)) return;
         const div = document.createElement("div");
@@ -414,11 +478,10 @@
         chatMessages.scrollTop = chatMessages.scrollHeight;
       }
 
-      // === Chat ===
       document.getElementById("sendBtn").onclick = () => {
         const text = chatInput.value.trim();
         if (!text) return;
-        const msg = { from: name, text };
+        const msg = { from: displayName, text };
         for (const p in pcs) {
           const dc = pcs[p]?.dc;
           if (dc && dc.readyState === "open") {
@@ -435,6 +498,13 @@
       chatInput.addEventListener("keypress", (e) => {
         if (e.key === "Enter") document.getElementById("sendBtn").click();
       });
+
+      // Добавим кнопку выхода (опционально)
+      const logoutBtn = document.createElement("button");
+      logoutBtn.textContent = "Выйти";
+      logoutBtn.style.marginTop = "10px";
+      logoutBtn.onclick = () => signOut(auth);
+      document.querySelector(".container").appendChild(logoutBtn);
     </script>
   </div>
 </body>
