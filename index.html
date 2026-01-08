@@ -2,32 +2,36 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Vox Syn P2P</title>
+<title>Vox Syn Audio Chat</title>
 <style>
-  body { font-family: Arial, sans-serif; background: #f0f0f0; margin: 0; padding: 20px; }
-  #videos { display: flex; flex-wrap: wrap; gap: 10px; }
-  video { width: 300px; height: 200px; background: black; }
-  #chat { margin-top: 20px; }
-  #chatMessages { height: 150px; overflow-y: auto; background: #fff; padding: 5px; border: 1px solid #ccc; }
-  #chatInput { width: 80%; }
+body { font-family: Arial; background: #f5f5f5; margin: 0; padding: 20px; }
+#login, #room { max-width: 600px; margin: auto; }
+#participants { margin-top: 20px; }
+.participant { padding: 10px; margin: 5px 0; background: #fff; border: 1px solid #ccc; border-radius: 5px; }
+#chat { margin-top: 20px; }
+#chatMessages { height: 150px; overflow-y: auto; background: #fff; padding: 5px; border: 1px solid #ccc; }
+#chatInput { width: 80%; }
 </style>
 </head>
 <body>
 
-<h1>Vox Syn P2P</h1>
-
-<div>
-  <button id="startBtn">Начать P2P</button>
-  <button id="shareScreenBtn">Поделиться экраном</button>
+<div id="login">
+<h2>Vox Syn Audio Chat</h2>
+<input id="nameInput" placeholder="Ваше имя" />
+<input id="roomInput" placeholder="Код комнаты" />
+<button id="joinBtn">Войти в комнату</button>
 </div>
 
-<div id="videos"></div>
+<div id="room" style="display:none;">
+<h2>Комната: <span id="roomCode"></span></h2>
+<div id="participants"></div>
 
 <div id="chat">
-  <h3>Чат</h3>
-  <div id="chatMessages"></div>
-  <input id="chatInput" placeholder="Написать сообщение..." />
-  <button id="sendBtn">Отправить</button>
+<h3>Чат</h3>
+<div id="chatMessages"></div>
+<input id="chatInput" placeholder="Написать сообщение..." />
+<button id="sendBtn">Отправить</button>
+</div>
 </div>
 
 <script type="module">
@@ -44,69 +48,81 @@ const firebaseConfig = {
   messagingSenderId: "410698338678",
   appId: "1:410698338678:web:316010281098e78af4ea57"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// ==================== ИНИЦИАЛИЗАЦИЯ P2P ====================
-const peerId = Math.random().toString(36).substring(2, 10);
-const roomId = "testRoom";
-const peersRef = ref(db, `rooms/${roomId}/peers`);
-const signalsRef = ref(db, `rooms/${roomId}/signals/${peerId}`);
-
-// Добавляем себя в комнату
-set(ref(db, `rooms/${roomId}/peers/${peerId}`), { joinedAt: Date.now() });
-window.addEventListener("beforeunload", () => {
-  remove(ref(db, `rooms/${roomId}/peers/${peerId}`));
-});
-
-// ==================== ЛОКАЛЬНОЕ ВИДЕО ====================
-const videosDiv = document.getElementById("videos");
+// ==================== GLOBALS ====================
 let localStream;
-let pcs = {}; // хранилище peer connections
+const pcs = {};
+let name = "";
+let roomId = "";
+let peerId = Math.random().toString(36).substring(2,10);
 
-async function startP2P() {
-  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  addVideo(peerId, localStream, true);
+// UI elements
+const loginDiv = document.getElementById("login");
+const roomDiv = document.getElementById("room");
+const participantsDiv = document.getElementById("participants");
+const roomCodeSpan = document.getElementById("roomCode");
+const chatMessages = document.getElementById("chatMessages");
+const chatInput = document.getElementById("chatInput");
 
-  // Слушаем других участников
+// ==================== LOGIN ====================
+document.getElementById("joinBtn").onclick = async () => {
+  name = document.getElementById("nameInput").value.trim();
+  roomId = document.getElementById("roomInput").value.trim();
+  if(!name || !roomId) { alert("Введите имя и код комнаты"); return; }
+
+  loginDiv.style.display="none";
+  roomDiv.style.display="block";
+  roomCodeSpan.textContent = roomId;
+
+  await startAudioChat();
+};
+
+// ==================== START AUDIO CHAT ====================
+async function startAudioChat() {
+  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  
+  // Добавляем себя в комнату
+  set(ref(db, `rooms/${roomId}/peers/${peerId}`), { name, joinedAt: Date.now() });
+  window.addEventListener("beforeunload", () => {
+    remove(ref(db, `rooms/${roomId}/peers/${peerId}`));
+  });
+
+  // Слушаем новых участников
+  const peersRef = ref(db, `rooms/${roomId}/peers`);
   onChildAdded(peersRef, snapshot => {
     const otherPeerId = snapshot.key;
-    if (otherPeerId !== peerId && !pcs[otherPeerId]) {
-      console.log("Подключаемся к:", otherPeerId);
-      createConnection(otherPeerId, true);
-    }
+    if(otherPeerId === peerId) return;
+    if(!pcs[otherPeerId]) createConnection(otherPeerId, true, snapshot.val());
   });
 
   // Слушаем сигналы
+  const signalsRef = ref(db, `rooms/${roomId}/signals/${peerId}`);
   onChildAdded(signalsRef, snapshot => {
     const signal = snapshot.val();
-    const from = signal.from;
-    if (!pcs[from]) createConnection(from, false, signal);
-    else pcs[from].pc.setRemoteDescription(signal.sdp).catch(console.error);
-    if (signal.candidate) pcs[from].pc.addIceCandidate(signal.candidate).catch(console.error);
+    if(!pcs[signal.from]) createConnection(signal.from, false, null, signal);
+    else if(signal.sdp) pcs[signal.from].pc.setRemoteDescription(signal.sdp).catch(console.error);
+    else if(signal.candidate) pcs[signal.from].pc.addIceCandidate(signal.candidate).catch(console.error);
   });
 }
 
-// ==================== СОЗДАНИЕ PEER CONNECTION ====================
-function createConnection(otherPeerId, isInitiator, signal) {
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  });
-
+// ==================== CREATE PEER CONNECTION ====================
+function createConnection(otherPeerId, isInitiator, peerInfo, signal) {
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
   pcs[otherPeerId] = { pc };
 
-  // Добавляем локальный поток
+  // Добавляем локальный аудио трек
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-  // Получение удалённого видео
+  // Получаем удалённый поток
   pc.ontrack = event => {
-    addVideo(otherPeerId, event.streams[0], false);
+    addParticipant(otherPeerId, peerInfo?.name || "Участник", event.streams[0]);
   };
 
   // ICE candidates
   pc.onicecandidate = event => {
-    if (event.candidate) {
+    if(event.candidate) {
       push(ref(db, `rooms/${roomId}/signals/${otherPeerId}`), {
         from: peerId,
         candidate: event.candidate
@@ -114,8 +130,26 @@ function createConnection(otherPeerId, isInitiator, signal) {
     }
   };
 
-  // Если инициатор — создаём оффер
-  if (isInitiator) {
+  // DATA CHANNEL для чата
+  if(isInitiator) {
+    const dc = pc.createDataChannel("chat");
+    pcs[otherPeerId].dc = dc;
+    dc.onmessage = e => {
+      const msg = JSON.parse(e.data);
+      addChatMessage(msg.from, msg.text);
+    };
+  } else {
+    pc.ondatachannel = e => {
+      pcs[otherPeerId].dc = e.channel;
+      e.channel.onmessage = e2 => {
+        const msg = JSON.parse(e2.data);
+        addChatMessage(msg.from, msg.text);
+      };
+    };
+  }
+
+  // Инициатор создаёт оффер
+  if(isInitiator) {
     pc.createOffer().then(offer => {
       pc.setLocalDescription(offer);
       push(ref(db, `rooms/${roomId}/signals/${otherPeerId}`), {
@@ -123,9 +157,9 @@ function createConnection(otherPeerId, isInitiator, signal) {
         sdp: offer
       });
     });
-  } else if (signal && signal.sdp) {
-    pc.setRemoteDescription(signal.sdp).then(() => {
-      pc.createAnswer().then(answer => {
+  } else if(signal && signal.sdp) {
+    pc.setRemoteDescription(signal.sdp).then(()=>{
+      pc.createAnswer().then(answer=>{
         pc.setLocalDescription(answer);
         push(ref(db, `rooms/${roomId}/signals/${otherPeerId}`), {
           from: peerId,
@@ -136,62 +170,36 @@ function createConnection(otherPeerId, isInitiator, signal) {
   }
 }
 
-// ==================== ФУНКЦИИ UI ====================
-function addVideo(id, stream, isLocal) {
-  let vid = document.getElementById(id);
-  if (!vid) {
-    vid = document.createElement("video");
-    vid.id = id;
-    vid.autoplay = true;
-    vid.playsInline = true;
-    if (isLocal) vid.muted = true;
-    videosDiv.appendChild(vid);
-  }
-  vid.srcObject = stream;
+// ==================== UI ====================
+function addParticipant(id, name, stream) {
+  if(document.getElementById(id)) return;
+  const div = document.createElement("div");
+  div.id = id;
+  div.className = "participant";
+  div.textContent = name;
+  const audio = document.createElement("audio");
+  audio.srcObject = stream;
+  audio.autoplay = true;
+  div.appendChild(audio);
+  participantsDiv.appendChild(div);
 }
 
-// ==================== ЧАТ ====================
-const chatInput = document.getElementById("chatInput");
-const chatMessages = document.getElementById("chatMessages");
-document.getElementById("sendBtn").onclick = () => {
-  const msg = chatInput.value.trim();
-  if (!msg) return;
-  for (let p in pcs) {
-    pcs[p].dc.send(JSON.stringify({ from: peerId, text: msg }));
+// ==================== CHAT ====================
+document.getElementById("sendBtn").onclick = ()=>{
+  const text = chatInput.value.trim();
+  if(!text) return;
+  for(let p in pcs) {
+    pcs[p].dc.send(JSON.stringify({ from: name, text }));
   }
-  addChatMessage("Я", msg);
-  chatInput.value = "";
+  addChatMessage("Я", text);
+  chatInput.value="";
 };
-
-function addChatMessage(sender, text) {
+function addChatMessage(sender, text){
   const div = document.createElement("div");
   div.textContent = `${sender}: ${text}`;
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
-
-// ==================== DATA CHANNEL ====================
-function createDataChannel(pc, otherPeerId) {
-  const dc = pc.createDataChannel("chat");
-  pcs[otherPeerId].dc = dc;
-  dc.onmessage = e => {
-    const data = JSON.parse(e.data);
-    addChatMessage(data.from, data.text);
-  };
-}
-
-// ==================== ПОДЕЛИТЬСЯ ЭКРАНОМ ====================
-document.getElementById("shareScreenBtn").onclick = async () => {
-  const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-  for (let p in pcs) {
-    const pc = pcs[p].pc;
-    const sender = pc.getSenders().find(s => s.track.kind === "video");
-    sender.replaceTrack(screenStream.getVideoTracks()[0]);
-  }
-};
-
-// ==================== КНОПКИ ====================
-document.getElementById("startBtn").onclick = startP2P;
 
 </script>
 </body>
