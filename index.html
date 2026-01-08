@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vox Syn Text Chat</title>
-  <!-- Favicon: зелёный градиентный овал -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='grad' x1='0%' y1='0%' x2='0%' y2='100%'%3E%3Cstop offset='0%' stop-color='%2300ff00'/%3E%3Cstop offset='100%' stop-color='%23008000'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='32' fill='url(%23grad)'/%3E%3C/svg%3E" type="image/svg+xml" />
+  <!-- Favicon -->
+  <link rel="icon" href="image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='grad' x1='0%' y1='0%' x2='0%' y2='100%'%3E%3Cstop offset='0%' stop-color='%2300ff00'/%3E%3Cstop offset='100%' stop-color='%23008000'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='32' fill='url(%23grad)'/%3E%3C/svg%3E" type="image/svg+xml" />
   <style>
     * {
       margin: 0;
@@ -16,11 +16,9 @@
 
     :root {
       --bg-primary: #121218;
-      --bg-secondary: #1e1e2f;
       --bg-panel: #25253a;
       --border: #3a3a55;
       --text-primary: #ffffff;
-      --text-secondary: #b0b0cc;
       --accent: #4c4cff;
       --accent-hover: #5d5dff;
       --success: #55ff55;
@@ -62,7 +60,7 @@
     }
 
     .subtitle {
-      color: var(--text-secondary);
+      color: #b0b0cc;
       font-size: 1rem;
     }
 
@@ -159,7 +157,6 @@
       color: var(--accent);
     }
 
-    /* Чат — статичный контейнер с прокруткой ТОЛЬКО сообщений */
     #chatBox {
       flex: 1;
       min-height: 0;
@@ -198,7 +195,7 @@
 
     .message-time {
       font-size: 0.8rem;
-      color: var(--text-secondary);
+      color: #b0b0cc;
     }
 
     .input-area {
@@ -217,7 +214,6 @@
       color: white;
     }
 
-    /* Участники */
     .participants-panel {
       width: 240px;
       background: var(--bg-panel);
@@ -314,7 +310,7 @@
   <div class="container">
     <header>
       <h1>Vox Syn Text Chat</h1>
-      <p class="subtitle">Хост может управлять комнатой</p>
+      <p class="subtitle">Хост управляет комнатой</p>
     </header>
 
     <div id="auth" class="card">
@@ -390,7 +386,8 @@
       onChildRemoved,
       get,
       remove,
-      update
+      onDisconnect,
+      onValue
     } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
     const firebaseConfig = {
@@ -424,7 +421,7 @@
     const errorMsg2 = document.getElementById("errorMsg2");
     const logoutBtn = document.getElementById("logoutBtn");
 
-    // UI toggle
+    // Auth UI
     document.getElementById("toggleToSignUp").onclick = () => {
       document.getElementById("signUpBtn").style.display = "inline-block";
       document.getElementById("signInBtn").style.display = "none";
@@ -511,6 +508,7 @@
       }
     });
 
+    // === КЛЮЧЕВАЯ ФУНКЦИЯ ===
     async function enterRoom(isNew) {
       loginDiv.style.display = "none";
       roomDiv.style.display = "flex";
@@ -529,18 +527,36 @@
         isHost = (hostId === userId);
       }
 
-      await set(ref(db, `rooms/${roomId}/peers/${userId}`), {
+      // === onDisconnect: удаляет пира при закрытии браузера ===
+      const myPeerRef = ref(db, `rooms/${roomId}/peers/${userId}`);
+      await set(myPeerRef, {
         name: displayName,
         joinedAt: Date.now()
       });
+      await onDisconnect(myPeerRef).remove();
 
+      // === Слушаем удаление своей записи (кик или дисконнект) ===
+      onValue(myPeerRef, (snapshot) => {
+        if (!snapshot.exists()) {
+          alert("Вы покинули комнату");
+          roomDiv.style.display = "none";
+          loginDiv.style.display = "block";
+          participantsList.innerHTML = "";
+          chatMessages.innerHTML = "";
+          isHost = false;
+          hostId = null;
+        }
+      });
+
+      // Cleanup on tab close (дополнительно)
       window.addEventListener("beforeunload", () => {
         remove(ref(db, `rooms/${roomId}/peers/${userId}`));
         cleanupRoom();
       });
 
       // Messages
-      onChildAdded(ref(db, `rooms/${roomId}/messages`), (snapshot) => {
+      const messagesRef = ref(db, `rooms/${roomId}/messages`);
+      onChildAdded(messagesRef, (snapshot) => {
         const msg = snapshot.val();
         const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         const div = document.createElement("div");
@@ -612,7 +628,6 @@
 
       item.appendChild(nameSpan);
 
-      // Кнопка кика — только для хоста
       if (isHost && id !== userId) {
         const kickBtn = document.createElement("button");
         kickBtn.className = "kick-btn";
@@ -631,9 +646,7 @@
 
     async function kickUser(userIdToKick) {
       if (!isHost) return;
-      if (userIdToKick === userId) return;
       await remove(ref(db, `rooms/${roomId}/peers/${userIdToKick}`));
-      // Firebase сам удалит запись, и onChildRemoved обновит UI
     }
 
     async function cleanupRoom() {
